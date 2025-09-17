@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeft, CreditCard, Truck, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, CreditCard, Truck, Shield, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,12 +8,28 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCart } from '@/contexts/CartContext';
-import { Link } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Link, useNavigate } from 'react-router-dom';
+
+interface OrderData {
+  email: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  phone: string;
+}
 
 const Checkout = () => {
-  const { items, total } = useCart();
+  const { items, total, clear } = useCart();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState('jazzcash');
-  const [formData, setFormData] = useState({
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [formData, setFormData] = useState<OrderData>({
     email: '',
     firstName: '',
     lastName: '',
@@ -21,9 +37,41 @@ const Checkout = () => {
     city: '',
     postalCode: '',
     phone: '',
-    agreeTerms: false,
-    saveInfo: false,
   });
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [saveInfo, setSaveInfo] = useState(false);
+
+  useEffect(() => {
+    // Check authentication and load user profile
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        setFormData(prev => ({ ...prev, email: session.user.email || '' }));
+        
+        // Load profile data if available
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setFormData(prev => ({
+            ...prev,
+            firstName: profile.full_name?.split(' ')[0] || '',
+            lastName: profile.full_name?.split(' ').slice(1).join(' ') || '',
+            address: profile.address || '',
+            city: profile.city || '',
+            postalCode: profile.postal_code || '',
+            phone: profile.phone || '',
+          }));
+        }
+      }
+    };
+    
+    checkAuth();
+  }, []);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-PK', {
@@ -40,19 +88,157 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleCheckboxChange = (name: string, checked: boolean) => {
-    setFormData(prev => ({ ...prev, [name]: checked }));
+  const generateOrderNumber = () => {
+    const timestamp = Date.now().toString().slice(-8);
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `TS-${timestamp}-${random}`;
+  };
+
+  const createOrder = async (orderData: OrderData) => {
+    try {
+      const orderNumber = generateOrderNumber();
+      
+      // Create order record
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          user_id: user?.id || null,
+          order_number: orderNumber,
+          total_amount: finalTotal,
+          status: 'pending',
+          currency: 'PKR',
+          shipping_address: {
+            firstName: orderData.firstName,
+            lastName: orderData.lastName,
+            address: orderData.address,
+            city: orderData.city,
+            postalCode: orderData.postalCode,
+            phone: orderData.phone,
+            email: orderData.email,
+          }
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items
+      const orderItems = items.map(item => ({
+        order_id: order.id,
+        product_id: item.id,
+        product_name: item.name,
+        product_sku: `SKU-${item.id}`,
+        quantity: item.qty,
+        unit_price: item.price,
+        total_price: item.price * item.qty,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      return order;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
   };
 
   const handlePlaceOrder = async () => {
-    // This will integrate with Supabase backend and JazzCash
-    console.log('Processing order...', { formData, items, total: finalTotal });
+    if (!agreeTerms) {
+      toast({
+        title: "Terms Required",
+        description: "Please agree to the terms and conditions to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate form
+    const requiredFields: (keyof OrderData)[] = ['firstName', 'lastName', 'address', 'city', 'phone'];
+    const missingFields = requiredFields.filter(field => !formData[field].trim());
     
-    // For now, show alert - in real app, this would:
-    // 1. Create order in Supabase
-    // 2. Generate JazzCash payment request
-    // 3. Redirect to JazzCash payment page
-    alert('Order functionality will be integrated with Supabase backend and JazzCash payment gateway');
+    if (missingFields.length > 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user && !formData.email.trim()) {
+      toast({
+        title: "Email Required",
+        description: "Please provide your email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Create order in Supabase
+      const order = await createOrder(formData);
+
+      // Create payment record
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert([{
+          order_id: order.id,
+          amount: finalTotal,
+          currency: 'PKR',
+          provider: paymentMethod,
+          status: 'pending',
+        }]);
+
+      if (paymentError) throw paymentError;
+
+      // Save user profile if requested and user is logged in
+      if (saveInfo && user) {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            full_name: `${formData.firstName} ${formData.lastName}`.trim(),
+            phone: formData.phone,
+            address: formData.address,
+            city: formData.city,
+            postal_code: formData.postalCode,
+          });
+      }
+
+      toast({
+        title: "Order Created Successfully!",
+        description: `Your order ${order.order_number} has been created. You will be redirected to payment.`,
+      });
+
+      // Clear cart
+      clear();
+
+      // Simulate JazzCash integration
+      // In production, you would redirect to JazzCash payment gateway
+      setTimeout(() => {
+        toast({
+          title: "Payment Integration",
+          description: "JazzCash payment integration will be implemented here. For demo, order is marked as pending.",
+        });
+        navigate('/my-account?tab=orders');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error placing order:', error);
+      toast({
+        title: "Order Failed",
+        description: error.message || "There was an error processing your order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0) {
@@ -61,7 +247,7 @@ const Checkout = () => {
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Your cart is empty</h1>
           <p className="text-muted-foreground mb-6">Add some items to your cart to proceed with checkout</p>
-          <Link to="/">
+          <Link to="/products">
             <Button>Continue Shopping</Button>
           </Link>
         </div>
@@ -89,6 +275,23 @@ const Checkout = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Checkout Form */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Authentication Status */}
+            {!user && (
+              <Card className="border-dashed border-2 border-primary/20 bg-primary/5">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">Already have an account?</h3>
+                      <p className="text-sm text-muted-foreground">Sign in for faster checkout</p>
+                    </div>
+                    <Link to="/auth">
+                      <Button variant="outline" size="sm">Sign In</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Contact Information */}
             <Card>
               <CardHeader>
@@ -100,21 +303,23 @@ const Checkout = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="your.email@example.com"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
+                {!user && (
+                  <div>
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="your.email@example.com"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="firstName">First Name *</Label>
                     <Input
                       id="firstName"
                       name="firstName"
@@ -125,7 +330,7 @@ const Checkout = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="lastName">Last Name *</Label>
                     <Input
                       id="lastName"
                       name="lastName"
@@ -137,7 +342,7 @@ const Checkout = () => {
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="phone">Phone Number *</Label>
                   <Input
                     id="phone"
                     name="phone"
@@ -163,7 +368,7 @@ const Checkout = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="address">Street Address</Label>
+                  <Label htmlFor="address">Street Address *</Label>
                   <Input
                     id="address"
                     name="address"
@@ -175,7 +380,7 @@ const Checkout = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="city">City *</Label>
                     <Input
                       id="city"
                       name="city"
@@ -193,7 +398,6 @@ const Checkout = () => {
                       placeholder="54000"
                       value={formData.postalCode}
                       onChange={handleInputChange}
-                      required
                     />
                   </div>
                 </div>
@@ -246,8 +450,8 @@ const Checkout = () => {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="agreeTerms"
-                      checked={formData.agreeTerms}
-                      onCheckedChange={(checked) => handleCheckboxChange('agreeTerms', checked as boolean)}
+                      checked={agreeTerms}
+                      onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                     />
                     <Label htmlFor="agreeTerms" className="text-sm">
                       I agree to the{' '}
@@ -260,16 +464,18 @@ const Checkout = () => {
                       </a>
                     </Label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="saveInfo"
-                      checked={formData.saveInfo}
-                      onCheckedChange={(checked) => handleCheckboxChange('saveInfo', checked as boolean)}
-                    />
-                    <Label htmlFor="saveInfo" className="text-sm">
-                      Save my information for faster checkout next time
-                    </Label>
-                  </div>
+                  {user && (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="saveInfo"
+                        checked={saveInfo}
+                        onCheckedChange={(checked) => setSaveInfo(checked as boolean)}
+                      />
+                      <Label htmlFor="saveInfo" className="text-sm">
+                        Save my information for faster checkout next time
+                      </Label>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -340,11 +546,18 @@ const Checkout = () => {
 
                 <Button
                   onClick={handlePlaceOrder}
-                  disabled={!formData.agreeTerms}
+                  disabled={!agreeTerms || isProcessing}
                   className="w-full bg-gradient-primary hover:bg-primary/90"
                   size="lg"
                 >
-                  Place Order - {formatPrice(finalTotal)}
+                  {isProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    `Place Order - ${formatPrice(finalTotal)}`
+                  )}
                 </Button>
               </CardContent>
             </Card>

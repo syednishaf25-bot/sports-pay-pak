@@ -16,6 +16,7 @@ import Admin from "./pages/Admin";
 import UserDashboard from "./pages/UserDashboard";
 import Category from "./pages/Category";
 import NotFound from "./pages/NotFound";
+import PaymentStatus from "./components/PaymentStatus";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,9 @@ const App = () => (
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/my-account" element={<UserDashboard />} />
                   <Route path="/admin" element={<Admin />} />
+                  <Route path="/payment/success" element={<PaymentStatus type="success" />} />
+                  <Route path="/payment/failed" element={<PaymentStatus type="failed" />} />
+                  <Route path="/payment/processing" element={<PaymentStatus type="processing" />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
