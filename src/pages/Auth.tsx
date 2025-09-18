@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'react-hot-toast';
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { user, signIn, signUp, resetPassword } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetForm, setShowResetForm] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -22,15 +24,11 @@ const Auth = () => {
   });
 
   useEffect(() => {
-    // Check if user is already logged in
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        navigate('/');
-      }
-    };
-    checkAuth();
-  }, [navigate]);
+    // Redirect if already logged in
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -42,27 +40,11 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Welcome back!",
-        description: "You have been signed in successfully.",
-      });
-
+      const { error } = await signIn(formData.email, formData.password);
+      if (error) throw error;
       navigate('/');
     } catch (error: any) {
-      toast({
-        title: "Sign in failed",
-        description: error.message || "Please check your credentials and try again.",
-        variant: "destructive",
-      });
+      toast.error(error.message || 'Sign in failed');
     } finally {
       setIsLoading(false);
     }
@@ -73,62 +55,99 @@ const Auth = () => {
     setIsLoading(true);
 
     if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Passwords don't match",
-        description: "Please make sure both passwords are the same.",
-        variant: "destructive",
-      });
+      toast.error('Passwords do not match');
       setIsLoading(false);
       return;
     }
 
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: formData.fullName,
-          }
-        }
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      toast({
-        title: "Account created!",
-        description: "Please check your email to verify your account.",
-      });
-
+      const { error } = await signUp(formData.email, formData.password, formData.fullName);
+      if (error) throw error;
     } catch (error: any) {
-      let message = "An error occurred during sign up.";
-      
-      if (error.message.includes("User already registered")) {
-        message = "An account with this email already exists. Please sign in instead.";
-      } else if (error.message.includes("Password")) {
-        message = "Password should be at least 6 characters long.";
-      } else if (error.message) {
-        message = error.message;
-      }
-
-      toast({
-        title: "Sign up failed",
-        description: message,
-        variant: "destructive",
-      });
+      toast.error(error.message || 'Sign up failed');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const { error } = await resetPassword(formData.email);
+      if (error) throw error;
+      setShowResetForm(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Password reset failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+  };
+
+  if (showResetForm) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="w-full max-w-md"
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Reset Password</CardTitle>
+              <CardDescription>
+                Enter your email address and we'll send you a link to reset your password.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">Email</Label>
+                  <Input
+                    id="reset-email"
+                    name="email"
+                    type="email"
+                    placeholder="Enter your email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1" disabled={isLoading}>
+                    {isLoading ? 'Sending...' : 'Send Reset Link'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowResetForm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="w-full max-w-md space-y-6"
+      >
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link to="/">
@@ -140,7 +159,7 @@ const Auth = () => {
         </div>
 
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Tahir Sports</h1>
+          <h1 className="text-2xl font-bold">T-Sports</h1>
           <p className="text-muted-foreground">Your premier sports destination</p>
         </div>
 
@@ -200,8 +219,17 @@ const Auth = () => {
                     </div>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Signing in..." : "Sign In"}
+                    {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowResetForm(true)}
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -212,7 +240,7 @@ const Auth = () => {
               <CardHeader>
                 <CardTitle>Sign Up</CardTitle>
                 <CardDescription>
-                  Create your account to start shopping with Tahir Sports.
+                  Create your account to start shopping with T-Sports.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -282,14 +310,14 @@ const Auth = () => {
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Creating account..." : "Sign Up"}
+                    {isLoading ? 'Creating account...' : 'Sign Up'}
                   </Button>
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
+      </motion.div>
     </div>
   );
 };

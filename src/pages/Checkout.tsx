@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCart } from '@/contexts/CartContext';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -24,7 +24,6 @@ interface OrderData {
 
 const Checkout = () => {
   const { items, total, clear } = useCart();
-  const { toast } = useToast();
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState('jazzcash');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -148,11 +147,7 @@ const Checkout = () => {
 
   const handlePlaceOrder = async () => {
     if (!agreeTerms) {
-      toast({
-        title: "Terms Required",
-        description: "Please agree to the terms and conditions to continue.",
-        variant: "destructive",
-      });
+      toast.error('Please agree to the terms and conditions to continue.');
       return;
     }
 
@@ -161,20 +156,12 @@ const Checkout = () => {
     const missingFields = requiredFields.filter(field => !formData[field].trim());
     
     if (missingFields.length > 0) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
+      toast.error('Please fill in all required fields.');
       return;
     }
 
     if (!user && !formData.email.trim()) {
-      toast({
-        title: "Email Required",
-        description: "Please provide your email address.",
-        variant: "destructive",
-      });
+      toast.error('Please provide your email address.');
       return;
     }
 
@@ -211,10 +198,7 @@ const Checkout = () => {
           });
       }
 
-      toast({
-        title: "Order Created Successfully!",
-        description: `Your order ${order.order_number} has been created. You will be redirected to payment.`,
-      });
+      toast.success(`Order Created Successfully! Your order ${order.order_number} has been created. You will be redirected to payment.`);
 
       // Clear cart
       clear();
@@ -222,20 +206,13 @@ const Checkout = () => {
       // Simulate JazzCash integration
       // In production, you would redirect to JazzCash payment gateway
       setTimeout(() => {
-        toast({
-          title: "Payment Integration",
-          description: "JazzCash payment integration will be implemented here. For demo, order is marked as pending.",
-        });
+        toast('Payment Integration: JazzCash payment integration will be implemented here. For demo, order is marked as pending.');
         navigate('/my-account?tab=orders');
       }, 2000);
 
     } catch (error: any) {
       console.error('Error placing order:', error);
-      toast({
-        title: "Order Failed",
-        description: error.message || "There was an error processing your order. Please try again.",
-        variant: "destructive",
-      });
+      toast.error(error.message || 'There was an error processing your order. Please try again.');
     } finally {
       setIsProcessing(false);
     }

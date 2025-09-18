@@ -32,23 +32,12 @@ const Contact = () => {
   const onSubmit = async (data: ContactFormData) => {
     setIsSubmitting(true);
     try {
-      // Store contact message in database
-      const { error } = await supabase
-        .from('contact_messages')
-        .insert([{
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          subject: data.subject,
-          message: data.message,
-        }]);
-
-      if (error) throw error;
-
-      // Send email notification
-      await supabase.functions.invoke('send-contact-email', {
+      // Send contact message via edge function
+      const { error } = await supabase.functions.invoke('send-contact-email', {
         body: data,
       });
+
+      if (error) throw error;
 
       toast.success('Your message has been sent successfully!');
       reset();

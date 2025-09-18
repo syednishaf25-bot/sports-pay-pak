@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, LogOut, BarChart3, Settings, Menu, Search } from 'lucide-react';
+import { ShoppingCart, User, LogOut, BarChart3, Settings, Menu, Contact } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
@@ -22,65 +21,29 @@ import {
 } from '@/components/ui/navigation-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/hooks/useAuth';
 import CartDrawer from './CartDrawer';
 import { ThemeToggle } from './ThemeToggle';
-import { supabase } from '@/integrations/supabase/client';
 
 const Header = () => {
   const { itemCount } = useCart();
+  const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    checkUser();
-  }, []);
-
-  const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      setUser(session.user);
-      await checkUserRole(session.user.id);
-    }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await checkUserRole(session.user.id);
-        } else {
-          setIsAdmin(false);
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  };
-
-  const checkUserRole = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .single();
-    
-    setIsAdmin(data?.role === 'admin');
-  };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate('/');
   };
 
-  const categories = ['Jerseys', 'Shorts', 'Accessories', 'Equipment', 'Footwear'];
+  const categories = ['Football', 'Cricket', 'Basketball', 'Tennis', 'Accessories'];
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
         <div className="mr-4 flex">
           <Link to="/" className="mr-6 flex items-center space-x-2">
-            <span className="font-bold text-xl bg-gradient-primary bg-clip-text text-transparent">
+            <span className="font-bold text-xl bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               T-Sports
             </span>
           </Link>
@@ -113,6 +76,11 @@ const Header = () => {
                     ))}
                   </div>
                 </NavigationMenuContent>
+              </NavigationMenuItem>
+              <NavigationMenuItem>
+                <Link to="/contact" className="group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[active]:bg-accent/50 data-[state=open]:bg-accent/50">
+                  Contact
+                </Link>
               </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
@@ -147,7 +115,7 @@ const Header = () => {
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
-                  {isAdmin && (
+                  {userRole === 'admin' && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => navigate('/dashboard')}>
@@ -202,6 +170,7 @@ const Header = () => {
               <div className="flex flex-col space-y-4 mt-4">
                 <Link to="/" className="text-sm font-medium">Home</Link>
                 <Link to="/products" className="text-sm font-medium">All Products</Link>
+                <Link to="/contact" className="text-sm font-medium">Contact</Link>
                 <Separator />
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Categories</h4>
@@ -219,7 +188,7 @@ const Header = () => {
                   <>
                     <Separator />
                     <Link to="/my-account" className="text-sm font-medium">My Account</Link>
-                    {isAdmin && (
+                    {userRole === 'admin' && (
                       <>
                         <Link to="/dashboard" className="text-sm font-medium">Analytics</Link>
                         <Link to="/admin" className="text-sm font-medium">Admin Panel</Link>
