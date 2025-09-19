@@ -145,7 +145,7 @@ const Checkout = () => {
     }
   };
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (paymentMethod: 'jazzcash' | 'easypaisa' | 'cash') => {
     if (!agreeTerms) {
       toast.error('Please agree to the terms and conditions to continue.');
       return;
@@ -162,6 +162,13 @@ const Checkout = () => {
 
     if (!user && !formData.email.trim()) {
       toast.error('Please provide your email address.');
+      return;
+    }
+
+    // Validate Pakistani phone number
+    const phoneRegex = /^(\+92|0)?3[0-9]{9}$/;
+    if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
+      toast.error('برائے کرم پاکستانی فون نمبر درست کریں');
       return;
     }
 
@@ -198,21 +205,78 @@ const Checkout = () => {
           });
       }
 
-      toast.success(`Order Created Successfully! Your order ${order.order_number} has been created. You will be redirected to payment.`);
-
       // Clear cart
       clear();
 
-      // Simulate JazzCash integration
-      // In production, you would redirect to JazzCash payment gateway
-      setTimeout(() => {
-        toast('Payment Integration: JazzCash payment integration will be implemented here. For demo, order is marked as pending.');
-        navigate('/my-account?tab=orders');
-      }, 2000);
+      if (paymentMethod === 'cash') {
+        toast.success('آرڈر کامیابی سے مکمل ہوا! کیش آن ڈیلیوری');
+        navigate('/dashboard');
+      } else if (paymentMethod === 'jazzcash') {
+        // Handle JazzCash payment
+        const { data, error } = await supabase.functions.invoke('jazzcash-payment', {
+          body: {
+            orderId: order.id,
+            amount: finalTotal
+          }
+        });
 
+        if (error) throw error;
+
+        if (data.success) {
+          // Create form and submit to JazzCash
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = data.paymentUrl;
+          form.style.display = 'none';
+
+          Object.entries(data.formData).forEach(([key, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value as string;
+            form.appendChild(input);
+          });
+
+          document.body.appendChild(form);
+          form.submit();
+        } else {
+          throw new Error('JazzCash payment initialization failed');
+        }
+      } else if (paymentMethod === 'easypaisa') {
+        // Handle EasyPaisa payment
+        const { data, error } = await supabase.functions.invoke('easypaisa-payment', {
+          body: {
+            orderId: order.id,
+            amount: finalTotal
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          // Create form and submit to EasyPaisa
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = data.paymentUrl;
+          form.style.display = 'none';
+
+          Object.entries(data.formData).forEach(([key, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value as string;
+            form.appendChild(input);
+          });
+
+          document.body.appendChild(form);
+          form.submit();
+        } else {
+          throw new Error('EasyPaisa payment initialization failed');
+        }
+      }
     } catch (error: any) {
       console.error('Error placing order:', error);
-      toast.error(error.message || 'There was an error processing your order. Please try again.');
+      toast.error(error.message || 'آرڈر پروسیسنگ میں خرابی');
     } finally {
       setIsProcessing(false);
     }
@@ -397,7 +461,7 @@ const Checkout = () => {
                     <RadioGroupItem value="jazzcash" id="jazzcash" />
                     <Label htmlFor="jazzcash" className="flex-1 cursor-pointer">
                       <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-primary" />
+                        <CreditCard className="h-5 w-5 text-orange-600" />
                         <div>
                           <p className="font-medium">JazzCash</p>
                           <p className="text-sm text-muted-foreground">
@@ -407,15 +471,31 @@ const Checkout = () => {
                       </div>
                     </Label>
                   </div>
-                  <div className="flex items-center space-x-3 p-4 border rounded-lg opacity-50">
-                    <RadioGroupItem value="cod" id="cod" disabled />
-                    <Label htmlFor="cod" className="flex-1 cursor-not-allowed">
+                  
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg">
+                    <RadioGroupItem value="easypaisa" id="easypaisa" />
+                    <Label htmlFor="easypaisa" className="flex-1 cursor-pointer">
                       <div className="flex items-center gap-3">
-                        <Truck className="h-5 w-5 text-muted-foreground" />
+                        <CreditCard className="h-5 w-5 text-green-600" />
+                        <div>
+                          <p className="font-medium">EasyPaisa</p>
+                          <p className="text-sm text-muted-foreground">
+                            Secure payment via EasyPaisa gateway
+                          </p>
+                        </div>
+                      </div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg">
+                    <RadioGroupItem value="cash" id="cash" />
+                    <Label htmlFor="cash" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <Truck className="h-5 w-5 text-blue-600" />
                         <div>
                           <p className="font-medium">Cash on Delivery</p>
                           <p className="text-sm text-muted-foreground">
-                            Coming soon
+                            کیش آن ڈیلیوری - Pay when you receive
                           </p>
                         </div>
                       </div>
@@ -522,7 +602,7 @@ const Checkout = () => {
                 </div>
 
                 <Button
-                  onClick={handlePlaceOrder}
+                  onClick={() => handlePlaceOrder(paymentMethod as 'jazzcash' | 'easypaisa' | 'cash')}
                   disabled={!agreeTerms || isProcessing}
                   className="w-full bg-gradient-primary hover:bg-primary/90"
                   size="lg"

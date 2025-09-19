@@ -152,11 +152,13 @@ export type Database = {
       }
       orders: {
         Row: {
+          admin_approved: boolean | null
           created_at: string | null
           currency: string | null
           id: string
           order_number: string
           pp_txn_ref_no: string | null
+          screenshot_url: string | null
           shipping_address: Json | null
           status: Database["public"]["Enums"]["order_status"] | null
           total_amount: number
@@ -164,11 +166,13 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          admin_approved?: boolean | null
           created_at?: string | null
           currency?: string | null
           id?: string
           order_number: string
           pp_txn_ref_no?: string | null
+          screenshot_url?: string | null
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"] | null
           total_amount: number
@@ -176,11 +180,13 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          admin_approved?: boolean | null
           created_at?: string | null
           currency?: string | null
           id?: string
           order_number?: string
           pp_txn_ref_no?: string | null
+          screenshot_url?: string | null
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"] | null
           total_amount?: number
@@ -395,7 +401,14 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "customer"
-      order_status: "pending" | "paid" | "shipped" | "delivered" | "cancelled"
+      order_status:
+        | "pending"
+        | "paid"
+        | "shipped"
+        | "delivered"
+        | "cancelled"
+        | "awaiting_approval"
+        | "confirmed"
       payment_status: "pending" | "completed" | "failed" | "refunded"
     }
     CompositeTypes: {
@@ -525,7 +538,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "customer"],
-      order_status: ["pending", "paid", "shipped", "delivered", "cancelled"],
+      order_status: [
+        "pending",
+        "paid",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "awaiting_approval",
+        "confirmed",
+      ],
       payment_status: ["pending", "completed", "failed", "refunded"],
     },
   },

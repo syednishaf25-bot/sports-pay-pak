@@ -12,9 +12,11 @@ interface Order {
   id: string;
   order_number: string;
   total_amount: number;
-  status: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled' | 'awaiting_approval' | 'confirmed';
   created_at: string;
   user_id: string;
+  screenshot_url?: string;
+  admin_approved?: boolean;
   profiles?: {
     full_name?: string;
   };
@@ -90,11 +92,11 @@ const OrderManagement = () => {
     setFilteredOrders(filtered);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled') => {
+  const updateOrderStatus = async (orderId: string, newStatus: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled' | 'awaiting_approval' | 'confirmed') => {
     try {
       const { error } = await supabase
         .from('orders')
-        .update({ status: newStatus })
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', orderId);
 
       if (error) throw error;
@@ -103,12 +105,68 @@ const OrderManagement = () => {
         title: "Success",
         description: `Order status updated to ${newStatus}`,
       });
+      fetchOrders(); // Refresh the orders list
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast({
+        title: "Error", 
+        description: "Failed to update order status",
+        variant: "destructive",
+      });
+    }
+  };
 
+  const approveOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          admin_approved: true,
+          status: 'confirmed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "آرڈر منظور ہو گیا!",
+      });
       fetchOrders();
-    } catch (error: any) {
+    } catch (error) {
+      console.error('Error approving order:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "آرڈر منظور کرنے میں خرابی",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const rejectOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          admin_approved: false,
+          status: 'cancelled',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success", 
+        description: "آرڈر منسوخ کر دیا گیا",
+      });
+      fetchOrders();
+    } catch (error) {
+      console.error('Error rejecting order:', error);
+      toast({
+        title: "Error",
+        description: "آرڈر منسوخ کرنے میں خرابی",
         variant: "destructive",
       });
     }
@@ -128,6 +186,8 @@ const OrderManagement = () => {
       case 'shipped': return 'outline';
       case 'delivered': return 'default';
       case 'cancelled': return 'destructive';
+      case 'awaiting_approval': return 'secondary';
+      case 'confirmed': return 'default';
       default: return 'secondary';
     }
   };
