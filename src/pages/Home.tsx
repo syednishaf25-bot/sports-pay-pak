@@ -146,13 +146,17 @@ const Home = () => {
             we have everything you need to dominate your game.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-gradient-primary hover:bg-primary/90">
-              Shop Now
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-            <Button size="lg" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
-              View Categories
-            </Button>
+            <Link to="/products">
+              <Button size="lg" className="bg-gradient-primary hover:bg-primary/90">
+                Shop Now
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link to="/products">
+              <Button size="lg" variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+                View Categories
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
