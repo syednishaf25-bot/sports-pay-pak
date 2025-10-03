@@ -16,6 +16,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import AdminLogin from "./pages/AdminLogin";
+import AdminSetup from "./pages/AdminSetup";
 import UserDashboard from "./pages/UserDashboard";
 import Category from "./pages/Category";
 import Contact from "./pages/Contact";
@@ -51,6 +52,7 @@ const App = () => (
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/my-account" element={<UserDashboard />} />
+                      <Route path="/admin/setup" element={<AdminSetup />} />
                       <Route path="/admin/login" element={<AdminLogin />} />
                       <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
                       <Route path="/contact" element={<Contact />} />

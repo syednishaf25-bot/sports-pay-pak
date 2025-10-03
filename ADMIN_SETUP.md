@@ -1,50 +1,57 @@
-# Admin Setup Instructions
+# Admin Setup Instructions - AUTOMATIC
 
-## Initial Admin Account Setup
+## ✅ Automatic One-Click Setup
 
-To set up the admin account with credentials:
+The admin account is now set up automatically! Just follow these simple steps:
+
+### Quick Setup (1 step):
+
+1. **Go to** `/admin/setup`
+2. **Click** "Create Admin Account" button
+3. **Done!** You'll be redirected to login
+
+### Admin Credentials:
 - **Email**: tahir@gmail.com
 - **Password**: tahir
 
-### Steps:
+### Login:
+- Go to `/admin/login`
+- Enter the credentials above
+- Access the admin panel at `/admin`
 
-1. **Sign up the admin user** (one-time setup):
-   - Go to `/auth` and sign up with email `tahir@gmail.com` and password `tahir`
-   - Check your email for confirmation (or disable email confirmation in Supabase Auth settings for faster testing)
+## How It Works
 
-2. **Promote the user to admin**:
-   - Open Supabase SQL Editor: https://supabase.com/dashboard/project/mbwpyfclwkfdtnpdpayf/sql/new
-   - Run this command:
-   ```sql
-   SELECT promote_user_to_admin('tahir@gmail.com');
-   ```
+The system automatically:
+- Creates the admin user account
+- Sets up the profile
+- Assigns admin role
+- Removes any customer role
+- Confirms the email (no verification needed)
 
-3. **Access the admin panel**:
-   - Go to `/admin/login`
-   - Sign in with the credentials above
-   - You'll be redirected to `/admin` dashboard
+## Routes
 
-## Admin Login Page
+- `/admin/setup` - One-click admin account creation
+- `/admin/login` - Secure admin login
+- `/admin` - Protected admin panel (requires admin role)
 
-- **URL**: `/admin/login`
-- Protected route that checks for admin role
-- Redirects non-admin users away from admin panel
+## Security Features
 
-## Security Notes
-
-- Admin routes are protected by Row-Level Security (RLS) policies
-- Role checks happen on both client and server side
-- The password 'tahir' is for development only - change it in production
-- Consider enabling password strength requirements in Supabase Auth settings
+- ✅ Protected routes with role-based access control
+- ✅ Row-Level Security (RLS) policies on all tables
+- ✅ Server-side role verification
+- ✅ Automatic redirect for unauthorized access
+- ✅ Secure password hashing by Supabase Auth
 
 ## Troubleshooting
 
-If you get authentication errors:
-1. Make sure Site URL and Redirect URLs are configured in Supabase:
-   - Go to: Authentication > URL Configuration
-   - Set Site URL to your app URL
-   - Add redirect URLs for all environments (preview, production)
+If the setup doesn't work:
+1. Check that the edge function `seed-admin` is deployed
+2. Verify Supabase credentials are configured correctly
+3. Check browser console for any errors
 
-2. If "Access denied" appears after login:
-   - Verify the user was promoted to admin using the SQL command above
-   - Check the `user_roles` table to confirm admin role is assigned
+## Production Note
+
+For production:
+- Change the password after first login
+- Enable password strength requirements in Supabase Auth
+- Consider enabling 2FA for admin accounts
