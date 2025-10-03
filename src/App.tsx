@@ -15,11 +15,13 @@ import Checkout from "./pages/Checkout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import AdminLogin from "./pages/AdminLogin";
 import UserDashboard from "./pages/UserDashboard";
 import Category from "./pages/Category";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import PaymentStatus from "./components/PaymentStatus";
+import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -49,7 +51,8 @@ const App = () => (
                       <Route path="/auth" element={<Auth />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/my-account" element={<UserDashboard />} />
-                      <Route path="/admin" element={<Admin />} />
+                      <Route path="/admin/login" element={<AdminLogin />} />
+                      <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
                       <Route path="/contact" element={<Contact />} />
                       <Route path="/payment/success" element={<PaymentStatus type="success" />} />
                       <Route path="/payment/failed" element={<PaymentStatus type="failed" />} />
