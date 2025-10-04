@@ -26,6 +26,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const { add } = useCart();
   const [isLiked, setIsLiked] = useState(false);
 
+  console.log('Rendering product card:', product.name, 'Image:', product.image);
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-PK', {
       style: 'currency',

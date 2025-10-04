@@ -58,6 +58,9 @@ const Products = () => {
         images: product.images || [],
       })) || [];
 
+      console.log('Fetched products:', formattedProducts);
+      console.log('Total products:', formattedProducts.length);
+
       setProducts(formattedProducts);
       const uniqueCategories = [...new Set(data?.map(p => p.category) || [])];
       setCategories(uniqueCategories);
@@ -90,6 +93,8 @@ const Products = () => {
 
     return matchesSearch && matchesCategory && matchesPrice;
   });
+
+  console.log('Filtered products:', filteredProducts.length, 'of', products.length);
 
   if (loading) {
     return (
