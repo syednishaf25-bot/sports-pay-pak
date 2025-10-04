@@ -36,7 +36,9 @@ const Products = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // Primary query: active products only (RLS should already enforce this)
+      let { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('is_active', true)
@@ -44,7 +46,22 @@ const Products = () => {
 
       if (error) throw error;
 
-      const formattedProducts: Product[] = data?.map(product => ({
+      // Fallback: if nothing returned, try without explicit filter
+      if (!data || data.length === 0) {
+        console.warn('Primary products query returned 0 items. Retrying without filter...');
+        const fallback = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!fallback.error && fallback.data) {
+          data = fallback.data;
+        } else if (fallback.error) {
+          console.error('Fallback products query error:', fallback.error);
+        }
+      }
+
+      const formattedProducts: Product[] = (data || []).map(product => ({
         id: product.id,
         name: product.name,
         slug: product.slug,
@@ -53,16 +70,16 @@ const Products = () => {
         category: product.category,
         rating: 4.5,
         reviews: Math.floor(Math.random() * 100) + 10,
-        inStock: product.inventory > 0,
-        inventory: product.inventory,
+        inStock: (product.inventory ?? 0) > 0,
+        inventory: product.inventory ?? 0,
         images: product.images || [],
-      })) || [];
+      }));
 
       console.log('Fetched products:', formattedProducts);
       console.log('Total products:', formattedProducts.length);
 
       setProducts(formattedProducts);
-      const uniqueCategories = [...new Set(data?.map(p => p.category) || [])];
+      const uniqueCategories = [...new Set((data || []).map(p => p.category))];
       setCategories(uniqueCategories);
     } catch (error) {
       console.error('Error fetching products:', error);
