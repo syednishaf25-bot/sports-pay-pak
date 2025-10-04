@@ -18,9 +18,11 @@ export default function AdminSetup() {
     setMessage('');
 
     try {
-      const { data, error } = await supabase.functions.invoke('seed-admin');
+      console.log('Invoking seed-admin edge function...');
+      const { data, error } = await supabase.functions.invoke('seed-admin', { body: {} });
 
       if (error) {
+        console.error('seed-admin error:', error);
         throw error;
       }
 
@@ -108,6 +110,9 @@ export default function AdminSetup() {
                   </>
                 )}
               </Button>
+              <div className="text-xs text-muted-foreground text-center">
+                Having trouble? <a href="https://mbwpyfclwkfdtnpdpayf.supabase.co/functions/v1/seed-admin" target="_blank" rel="noreferrer" className="text-primary hover:underline">Run setup directly</a>
+              </div>
             </div>
           )}
 
