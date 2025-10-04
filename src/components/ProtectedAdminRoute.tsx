@@ -14,9 +14,12 @@ export default function ProtectedAdminRoute({ children }: ProtectedAdminRoutePro
   useEffect(() => {
     if (!loading) {
       if (!user) {
+        console.log('No user found, redirecting to admin login');
         navigate('/admin/login');
       } else if (userRole !== 'admin') {
-        navigate('/');
+        console.log('User role is not admin:', userRole, 'User ID:', user.id);
+        console.log('Please run admin setup first at /admin/setup');
+        navigate('/admin/setup');
       }
     }
   }, [user, userRole, loading, navigate]);

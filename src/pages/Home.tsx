@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Star, Trophy, Shield, Truck, Search, Filter } from 'lucide-react';
+import { ArrowRight, Star, Trophy, Shield, Truck, Search, Filter, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -127,6 +127,23 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Admin Setup Banner */}
+      <div className="bg-primary/10 border-b border-primary/20 py-2">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center gap-2 text-sm">
+            <Settings className="h-4 w-4 text-primary" />
+            <span>Admin Setup:</span>
+            <Link to="/admin/setup" className="font-medium text-primary hover:underline">
+              Click here to create admin account
+            </Link>
+            <span>|</span>
+            <Link to="/admin/login" className="font-medium text-primary hover:underline">
+              Admin Login
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <section 
         className="relative h-[80vh] flex items-center justify-center bg-cover bg-center"
