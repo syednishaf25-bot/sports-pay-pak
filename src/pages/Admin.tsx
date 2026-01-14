@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Pencil, Trash2, Plus, Upload } from 'lucide-react';
+import { Pencil, Trash2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,6 @@ const productSchema = z.object({
   description: z.string().optional(),
   category: z.string().min(1, 'Category is required'),
   price: z.number().positive('Price must be positive'),
-  sku: z.string().min(3, 'SKU must be at least 3 characters'),
   inventory: z.number().int().nonnegative('Inventory must be non-negative'),
   images: z.array(z.string().url()).optional(),
 });
@@ -33,7 +32,6 @@ interface Product {
   description?: string;
   category: string;
   price: number;
-  sku: string;
   inventory: number;
   images?: string[];
   is_active: boolean;
@@ -71,7 +69,7 @@ const Admin = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setProducts(data || []);
+      setProducts((data as Product[]) || []);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -85,8 +83,7 @@ const Admin = () => {
 
   const onSubmit = async (data: ProductFormData) => {
     try {
-      // Ensure all required fields are present
-      if (!data.name || !data.slug || !data.category || !data.price || !data.sku || data.inventory === undefined) {
+      if (!data.name || !data.slug || !data.category || !data.price || data.inventory === undefined) {
         toast({
           title: "Error",
           description: "Please fill in all required fields",
@@ -101,7 +98,6 @@ const Admin = () => {
         description: data.description || '',
         category: data.category,
         price: data.price,
-        sku: data.sku,
         inventory: data.inventory,
         images: data.images || [],
       };
@@ -150,7 +146,6 @@ const Admin = () => {
     setValue('description', product.description || '');
     setValue('category', product.category);
     setValue('price', product.price);
-    setValue('sku', product.sku);
     setValue('inventory', product.inventory);
     setValue('images', product.images || []);
   };
@@ -307,20 +302,6 @@ const Admin = () => {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      {...register('sku')}
-                      placeholder="TSJ001"
-                    />
-                    {errors.sku && (
-                      <p className="text-sm text-destructive">{errors.sku.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
                     <Label htmlFor="price">Price (PKR)</Label>
                     <Input
                       id="price"
@@ -333,18 +314,19 @@ const Admin = () => {
                       <p className="text-sm text-destructive">{errors.price.message}</p>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="inventory">Inventory</Label>
-                    <Input
-                      id="inventory"
-                      type="number"
-                      {...register('inventory', { valueAsNumber: true })}
-                      placeholder="50"
-                    />
-                    {errors.inventory && (
-                      <p className="text-sm text-destructive">{errors.inventory.message}</p>
-                    )}
-                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="inventory">Inventory</Label>
+                  <Input
+                    id="inventory"
+                    type="number"
+                    {...register('inventory', { valueAsNumber: true })}
+                    placeholder="50"
+                  />
+                  {errors.inventory && (
+                    <p className="text-sm text-destructive">{errors.inventory.message}</p>
+                  )}
                 </div>
 
                 <div className="flex gap-2">
@@ -393,7 +375,7 @@ const Admin = () => {
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground mb-1">
-                          {product.category} • SKU: {product.sku}
+                          {product.category}
                         </p>
                         <div className="flex items-center gap-4 text-sm">
                           <span className="font-medium">{formatPrice(product.price)}</span>

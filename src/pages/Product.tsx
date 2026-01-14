@@ -20,7 +20,6 @@ interface Product {
   category: string;
   description: string;
   inventory: number;
-  sku: string;
 }
 
 const Product = () => {

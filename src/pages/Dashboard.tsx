@@ -37,7 +37,6 @@ const Dashboard = () => {
     try {
       setLoading(true);
 
-      // Get total stats
       const [ordersRes, productsRes, usersRes] = await Promise.all([
         supabase.from('orders').select('total_amount, status'),
         supabase.from('products').select('id'),
@@ -45,12 +44,11 @@ const Dashboard = () => {
       ]);
 
       const totalSales = ordersRes.data?.reduce((sum, order) => 
-        sum + (order.status === 'paid' ? order.total_amount : 0), 0) || 0;
-      const totalOrders = ordersRes.data?.filter(o => o.status === 'paid').length || 0;
+        sum + (order.status === 'paid' || order.status === 'delivered' ? Number(order.total_amount) : 0), 0) || 0;
+      const totalOrders = ordersRes.data?.length || 0;
       const totalProducts = productsRes.data?.length || 0;
       const totalUsers = usersRes.data?.length || 0;
 
-      // Generate mock sales data for last 7 days
       const salesData = Array.from({ length: 7 }, (_, i) => {
         const date = new Date();
         date.setDate(date.getDate() - (6 - i));
@@ -61,31 +59,23 @@ const Dashboard = () => {
         };
       });
 
-      // Get top products
       const { data: orderItems } = await supabase
         .from('order_items')
-        .select(`
-          quantity,
-          total_price,
-          product_name,
-          orders!inner(status)
-        `)
-        .eq('orders.status', 'paid');
+        .select('quantity, unit_price, product_name');
 
       const productSales = orderItems?.reduce((acc: any, item) => {
         if (!acc[item.product_name]) {
           acc[item.product_name] = { name: item.product_name, sales: 0, quantity: 0 };
         }
-        acc[item.product_name].sales += item.total_price;
+        acc[item.product_name].sales += Number(item.unit_price) * item.quantity;
         acc[item.product_name].quantity += item.quantity;
         return acc;
       }, {}) || {};
 
       const topProducts = Object.values(productSales)
         .sort((a: any, b: any) => b.sales - a.sales)
-        .slice(0, 5);
+        .slice(0, 5) as Array<{ name: string; sales: number; quantity: number }>;
 
-      // Get category sales
       const { data: products } = await supabase
         .from('products')
         .select('category, price');
@@ -94,14 +84,14 @@ const Dashboard = () => {
         if (!acc[product.category]) {
           acc[product.category] = { category: product.category, sales: 0 };
         }
-        acc[product.category].sales += product.price;
+        acc[product.category].sales += Number(product.price);
         return acc;
       }, {}) || {};
 
       const categorySales = Object.values(categoryData).map((item: any, index) => ({
         ...item,
         color: COLORS[index % COLORS.length]
-      }));
+      })) as Array<{ category: string; sales: number; color: string }>;
 
       setAnalytics({
         totalSales,
@@ -109,8 +99,8 @@ const Dashboard = () => {
         totalProducts,
         totalUsers,
         salesData,
-        topProducts: topProducts as any,
-        categorySales: categorySales as any
+        topProducts,
+        categorySales
       });
 
     } catch (error) {
@@ -158,7 +148,6 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -213,9 +202,7 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Sales Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Sales Overview</CardTitle>
@@ -246,7 +233,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Top Products */}
           <Card>
             <CardHeader>
               <CardTitle>Top Products</CardTitle>
@@ -254,21 +240,26 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={analytics.topProducts} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={100} />
-                    <Tooltip formatter={(value) => [formatPrice(value as number), 'Sales']} />
-                    <Bar dataKey="sales" fill="hsl(var(--primary))" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {analytics.topProducts.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.topProducts} layout="horizontal">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="name" type="category" width={100} />
+                      <Tooltip formatter={(value) => [formatPrice(value as number), 'Sales']} />
+                      <Bar dataKey="sales" fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No sales data yet
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Category Distribution */}
         <Card>
           <CardHeader>
             <CardTitle>Sales by Category</CardTitle>
@@ -276,25 +267,31 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={analytics.categorySales}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ category, percent }) => `${category} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="sales"
-                  >
-                    {analytics.categorySales.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [formatPrice(value as number), 'Sales']} />
-                </PieChart>
-              </ResponsiveContainer>
+              {analytics.categorySales.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={analytics.categorySales}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ category, percent }) => `${category} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="sales"
+                    >
+                      {analytics.categorySales.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [formatPrice(value as number), 'Sales']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No category data yet
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

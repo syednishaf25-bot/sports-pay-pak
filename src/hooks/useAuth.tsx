@@ -50,12 +50,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 .from('user_roles')
                 .select('role')
                 .eq('user_id', session.user.id)
-                .single();
+                .maybeSingle();
               
-              setUserRole(roleData?.role || 'customer');
+              setUserRole(roleData?.role || 'user');
             } catch (error) {
               console.error('Error fetching user role:', error);
-              setUserRole('customer');
+              setUserRole('user');
             }
           }, 0);
         } else {
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { error };
       }
       
-      toast.success('Please check your email to confirm your account!');
+      toast.success('Account created successfully!');
       return { error: null };
     } catch (error: any) {
       toast.error('An unexpected error occurred');

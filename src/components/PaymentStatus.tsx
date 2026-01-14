@@ -9,41 +9,58 @@ interface PaymentStatusProps {
   type: 'success' | 'failed' | 'processing';
 }
 
+interface OrderItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+}
+
+interface OrderDetails {
+  id: string;
+  total_amount: number;
+  status: string;
+  customer_name: string;
+  order_items?: OrderItem[];
+}
+
 const PaymentStatus = ({ type }: PaymentStatusProps) => {
   const [searchParams] = useSearchParams();
-  const [orderDetails, setOrderDetails] = useState<any>(null);
+  const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const orderNumber = searchParams.get('order');
+  const orderId = searchParams.get('order');
   const errorMessage = searchParams.get('error');
 
   useEffect(() => {
-    if (orderNumber) {
-      fetchOrderDetails(orderNumber);
+    if (orderId) {
+      fetchOrderDetails(orderId);
     } else {
       setLoading(false);
     }
-  }, [orderNumber]);
+  }, [orderId]);
 
-  const fetchOrderDetails = async (orderNum: string) => {
+  const fetchOrderDetails = async (id: string) => {
     try {
       const { data: order, error } = await supabase
         .from('orders')
         .select(`
-          *,
+          id,
+          total_amount,
+          status,
+          customer_name,
           order_items (
             id,
             product_name,
             quantity,
-            unit_price,
-            total_price
+            unit_price
           )
         `)
-        .eq('order_number', orderNum)
-        .single();
+        .eq('id', id)
+        .maybeSingle();
 
       if (!error && order) {
-        setOrderDetails(order);
+        setOrderDetails(order as OrderDetails);
       }
     } catch (error) {
       console.error('Error fetching order details:', error);
@@ -126,8 +143,8 @@ const PaymentStatus = ({ type }: PaymentStatusProps) => {
               <div className="bg-background rounded-lg p-4 space-y-3">
                 <div className="text-sm space-y-2">
                   <div className="flex justify-between">
-                    <span>Order Number:</span>
-                    <span className="font-medium">{orderDetails.order_number}</span>
+                    <span>Customer:</span>
+                    <span className="font-medium">{orderDetails.customer_name}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Total Amount:</span>
@@ -151,10 +168,10 @@ const PaymentStatus = ({ type }: PaymentStatusProps) => {
                   <div className="border-t pt-3">
                     <h4 className="text-sm font-medium mb-2">Order Items:</h4>
                     <div className="space-y-1">
-                      {orderDetails.order_items.map((item: any) => (
+                      {orderDetails.order_items.map((item) => (
                         <div key={item.id} className="flex justify-between text-xs">
                           <span>{item.product_name} x{item.quantity}</span>
-                          <span>{formatPrice(item.total_price)}</span>
+                          <span>{formatPrice(item.unit_price * item.quantity)}</span>
                         </div>
                       ))}
                     </div>
@@ -166,8 +183,8 @@ const PaymentStatus = ({ type }: PaymentStatusProps) => {
             <div className="flex flex-col sm:flex-row gap-3">
               {type === 'success' ? (
                 <>
-                  <Link to="/my-account?tab=orders" className="flex-1">
-                    <Button className="w-full">View Order</Button>
+                  <Link to="/" className="flex-1">
+                    <Button className="w-full">Back to Home</Button>
                   </Link>
                   <Link to="/products" className="flex-1">
                     <Button variant="outline" className="w-full">Continue Shopping</Button>

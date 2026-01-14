@@ -4,29 +4,31 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Search, Package, User, Calendar } from 'lucide-react';
+import { Search, Package, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+interface OrderItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+}
+
 interface Order {
   id: string;
-  order_number: string;
   total_amount: number;
-  status: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled' | 'awaiting_approval' | 'confirmed';
+  status: string;
   created_at: string;
-  user_id: string;
-  screenshot_url?: string;
-  admin_approved?: boolean;
-  profiles?: {
-    full_name?: string;
-  };
-  order_items?: Array<{
-    id: string;
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>;
+  user_id: string | null;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string | null;
+  shipping_address: string;
+  payment_method: string | null;
+  payment_screenshot: string | null;
+  notes: string | null;
+  order_items?: OrderItem[];
 }
 
 const OrderManagement = () => {
@@ -56,14 +58,13 @@ const OrderManagement = () => {
             id,
             product_name,
             quantity,
-            unit_price,
-            total_price
+            unit_price
           )
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      setOrders((data as Order[]) || []);
     } catch (error: any) {
       console.error('Error fetching orders:', error);
       toast({
@@ -81,7 +82,9 @@ const OrderManagement = () => {
 
     if (searchQuery) {
       filtered = filtered.filter(order =>
-        order.order_number.toLowerCase().includes(searchQuery.toLowerCase())
+        order.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.customer_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.id.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -92,7 +95,7 @@ const OrderManagement = () => {
     setFilteredOrders(filtered);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled' | 'awaiting_approval' | 'confirmed') => {
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
       const { error } = await supabase
         .from('orders')
@@ -105,68 +108,12 @@ const OrderManagement = () => {
         title: "Success",
         description: `Order status updated to ${newStatus}`,
       });
-      fetchOrders(); // Refresh the orders list
+      fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
       toast({
         title: "Error", 
         description: "Failed to update order status",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const approveOrder = async (orderId: string) => {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          admin_approved: true,
-          status: 'confirmed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "آرڈر منظور ہو گیا!",
-      });
-      fetchOrders();
-    } catch (error) {
-      console.error('Error approving order:', error);
-      toast({
-        title: "Error",
-        description: "آرڈر منظور کرنے میں خرابی",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const rejectOrder = async (orderId: string) => {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          admin_approved: false,
-          status: 'cancelled',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success", 
-        description: "آرڈر منسوخ کر دیا گیا",
-      });
-      fetchOrders();
-    } catch (error) {
-      console.error('Error rejecting order:', error);
-      toast({
-        title: "Error",
-        description: "آرڈر منسوخ کرنے میں خرابی",
         variant: "destructive",
       });
     }
@@ -186,7 +133,6 @@ const OrderManagement = () => {
       case 'shipped': return 'outline';
       case 'delivered': return 'default';
       case 'cancelled': return 'destructive';
-      case 'awaiting_approval': return 'secondary';
       case 'confirmed': return 'default';
       default: return 'secondary';
     }
@@ -221,7 +167,7 @@ const OrderManagement = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by order number or customer name..."
+                placeholder="Search by customer name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -261,13 +207,14 @@ const OrderManagement = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">
-                        Order #{order.order_number}
+                        {order.customer_name}
                       </CardTitle>
                       <CardDescription className="flex items-center gap-4">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
                           {new Date(order.created_at).toLocaleDateString('en-PK')}
                         </span>
+                        <span>{order.customer_email}</span>
                       </CardDescription>
                     </div>
                     <div className="text-right">
@@ -276,7 +223,7 @@ const OrderManagement = () => {
                       </div>
                       <Select
                         value={order.status}
-                        onValueChange={(value) => updateOrderStatus(order.id, value as 'paid' | 'pending' | 'shipped' | 'delivered' | 'cancelled')}
+                        onValueChange={(value) => updateOrderStatus(order.id, value)}
                       >
                         <SelectTrigger className="w-32">
                           <Badge variant={getStatusColor(order.status)}>
@@ -300,7 +247,7 @@ const OrderManagement = () => {
                     {order.order_items?.map((item) => (
                       <div key={item.id} className="flex justify-between text-sm text-muted-foreground">
                         <span>{item.product_name} (×{item.quantity})</span>
-                        <span>{formatPrice(item.total_price)}</span>
+                        <span>{formatPrice(item.unit_price * item.quantity)}</span>
                       </div>
                     ))}
                   </div>

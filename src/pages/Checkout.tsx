@@ -25,7 +25,7 @@ interface OrderData {
 const Checkout = () => {
   const { items, total, clear } = useCart();
   const navigate = useNavigate();
-  const [paymentMethod, setPaymentMethod] = useState('jazzcash');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [isProcessing, setIsProcessing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [formData, setFormData] = useState<OrderData>({
@@ -41,19 +41,17 @@ const Checkout = () => {
   const [saveInfo, setSaveInfo] = useState(false);
 
   useEffect(() => {
-    // Check authentication and load user profile
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
         setFormData(prev => ({ ...prev, email: session.user.email || '' }));
         
-        // Load profile data if available
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
         
         if (profile) {
           setFormData(prev => ({
@@ -62,7 +60,6 @@ const Checkout = () => {
             lastName: profile.full_name?.split(' ').slice(1).join(' ') || '',
             address: profile.address || '',
             city: profile.city || '',
-            postalCode: profile.postal_code || '',
             phone: profile.phone || '',
           }));
         }
@@ -87,49 +84,33 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const generateOrderNumber = () => {
-    const timestamp = Date.now().toString().slice(-8);
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `TS-${timestamp}-${random}`;
-  };
-
   const createOrder = async (orderData: OrderData) => {
     try {
-      const orderNumber = generateOrderNumber();
+      const shippingAddress = `${orderData.address}, ${orderData.city}${orderData.postalCode ? `, ${orderData.postalCode}` : ''}`;
       
-      // Create order record
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert([{
           user_id: user?.id || null,
-          order_number: orderNumber,
           total_amount: finalTotal,
           status: 'pending',
-          currency: 'PKR',
-          shipping_address: {
-            firstName: orderData.firstName,
-            lastName: orderData.lastName,
-            address: orderData.address,
-            city: orderData.city,
-            postalCode: orderData.postalCode,
-            phone: orderData.phone,
-            email: orderData.email,
-          }
+          customer_name: `${orderData.firstName} ${orderData.lastName}`.trim(),
+          customer_email: orderData.email || user?.email || '',
+          customer_phone: orderData.phone,
+          shipping_address: shippingAddress,
+          payment_method: paymentMethod,
         }])
         .select()
         .single();
 
       if (orderError) throw orderError;
 
-      // Create order items
       const orderItems = items.map(item => ({
         order_id: order.id,
         product_id: item.id,
         product_name: item.name,
-        product_sku: `SKU-${item.id}`,
         quantity: item.qty,
         unit_price: item.price,
-        total_price: item.price * item.qty,
       }));
 
       const { error: itemsError } = await supabase
@@ -145,13 +126,12 @@ const Checkout = () => {
     }
   };
 
-  const handlePlaceOrder = async (paymentMethod: 'jazzcash' | 'easypaisa' | 'cash') => {
+  const handlePlaceOrder = async () => {
     if (!agreeTerms) {
       toast.error('Please agree to the terms and conditions to continue.');
       return;
     }
 
-    // Validate form
     const requiredFields: (keyof OrderData)[] = ['firstName', 'lastName', 'address', 'city', 'phone'];
     const missingFields = requiredFields.filter(field => !formData[field].trim());
     
@@ -165,33 +145,17 @@ const Checkout = () => {
       return;
     }
 
-    // Validate Pakistani phone number
     const phoneRegex = /^(\+92|0)?3[0-9]{9}$/;
     if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
-      toast.error('برائے کرم پاکستانی فون نمبر درست کریں');
+      toast.error('Please enter a valid Pakistani phone number');
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      // Create order in Supabase
-      const order = await createOrder(formData);
+      await createOrder(formData);
 
-      // Create payment record
-      const { error: paymentError } = await supabase
-        .from('payments')
-        .insert([{
-          order_id: order.id,
-          amount: finalTotal,
-          currency: 'PKR',
-          provider: paymentMethod,
-          status: 'pending',
-        }]);
-
-      if (paymentError) throw paymentError;
-
-      // Save user profile if requested and user is logged in
       if (saveInfo && user) {
         await supabase
           .from('profiles')
@@ -201,82 +165,15 @@ const Checkout = () => {
             phone: formData.phone,
             address: formData.address,
             city: formData.city,
-            postal_code: formData.postalCode,
           });
       }
 
-      // Clear cart
       clear();
-
-      if (paymentMethod === 'cash') {
-        toast.success('آرڈر کامیابی سے مکمل ہوا! کیش آن ڈیلیوری');
-        navigate('/dashboard');
-      } else if (paymentMethod === 'jazzcash') {
-        // Handle JazzCash payment
-        const { data, error } = await supabase.functions.invoke('jazzcash-payment', {
-          body: {
-            orderId: order.id,
-            amount: finalTotal
-          }
-        });
-
-        if (error) throw error;
-
-        if (data.success) {
-          // Create form and submit to JazzCash
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = data.paymentUrl;
-          form.style.display = 'none';
-
-          Object.entries(data.formData).forEach(([key, value]) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = value as string;
-            form.appendChild(input);
-          });
-
-          document.body.appendChild(form);
-          form.submit();
-        } else {
-          throw new Error('JazzCash payment initialization failed');
-        }
-      } else if (paymentMethod === 'easypaisa') {
-        // Handle EasyPaisa payment
-        const { data, error } = await supabase.functions.invoke('easypaisa-payment', {
-          body: {
-            orderId: order.id,
-            amount: finalTotal
-          }
-        });
-
-        if (error) throw error;
-
-        if (data.success) {
-          // Create form and submit to EasyPaisa
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = data.paymentUrl;
-          form.style.display = 'none';
-
-          Object.entries(data.formData).forEach(([key, value]) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = value as string;
-            form.appendChild(input);
-          });
-
-          document.body.appendChild(form);
-          form.submit();
-        } else {
-          throw new Error('EasyPaisa payment initialization failed');
-        }
-      }
+      toast.success('Order placed successfully! Cash on Delivery');
+      navigate('/');
     } catch (error: any) {
       console.error('Error placing order:', error);
-      toast.error(error.message || 'آرڈر پروسیسنگ میں خرابی');
+      toast.error(error.message || 'Error processing order');
     } finally {
       setIsProcessing(false);
     }
@@ -299,7 +196,6 @@ const Checkout = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link to="/">
             <Button variant="ghost" size="sm">
@@ -314,9 +210,7 @@ const Checkout = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Checkout Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Authentication Status */}
             {!user && (
               <Card className="border-dashed border-2 border-primary/20 bg-primary/5">
                 <CardContent className="p-4">
@@ -333,7 +227,6 @@ const Checkout = () => {
               </Card>
             )}
 
-            {/* Contact Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -397,7 +290,6 @@ const Checkout = () => {
               </CardContent>
             </Card>
 
-            {/* Shipping Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -445,7 +337,6 @@ const Checkout = () => {
               </CardContent>
             </Card>
 
-            {/* Payment Method */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -458,36 +349,6 @@ const Checkout = () => {
               <CardContent>
                 <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
                   <div className="flex items-center space-x-3 p-4 border rounded-lg">
-                    <RadioGroupItem value="jazzcash" id="jazzcash" />
-                    <Label htmlFor="jazzcash" className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-orange-600" />
-                        <div>
-                          <p className="font-medium">JazzCash</p>
-                          <p className="text-sm text-muted-foreground">
-                            Secure payment via JazzCash gateway
-                          </p>
-                        </div>
-                      </div>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3 p-4 border rounded-lg">
-                    <RadioGroupItem value="easypaisa" id="easypaisa" />
-                    <Label htmlFor="easypaisa" className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-green-600" />
-                        <div>
-                          <p className="font-medium">EasyPaisa</p>
-                          <p className="text-sm text-muted-foreground">
-                            Secure payment via EasyPaisa gateway
-                          </p>
-                        </div>
-                      </div>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3 p-4 border rounded-lg">
                     <RadioGroupItem value="cash" id="cash" />
                     <Label htmlFor="cash" className="flex-1 cursor-pointer">
                       <div className="flex items-center gap-3">
@@ -495,32 +356,68 @@ const Checkout = () => {
                         <div>
                           <p className="font-medium">Cash on Delivery</p>
                           <p className="text-sm text-muted-foreground">
-                            کیش آن ڈیلیوری - Pay when you receive
+                            Pay when your order arrives
                           </p>
                         </div>
                       </div>
                     </Label>
                   </div>
                 </RadioGroup>
+              </CardContent>
+            </Card>
+          </div>
 
-                <div className="mt-6 space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="agreeTerms"
-                      checked={agreeTerms}
-                      onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
-                    />
-                    <Label htmlFor="agreeTerms" className="text-sm">
-                      I agree to the{' '}
-                      <a href="#" className="text-primary hover:underline">
-                        Terms & Conditions
-                      </a>{' '}
-                      and{' '}
-                      <a href="#" className="text-primary hover:underline">
-                        Privacy Policy
-                      </a>
-                    </Label>
+          <div className="lg:col-span-1">
+            <Card className="sticky top-4">
+              <CardHeader>
+                <CardTitle>Order Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex gap-3">
+                      <div className="w-16 h-16 bg-muted rounded-lg overflow-hidden">
+                        <img
+                          src={item.image || '/placeholder.svg'}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-sm">{item.name}</h4>
+                        <p className="text-sm text-muted-foreground">Qty: {item.qty}</p>
+                        <p className="text-sm font-medium">{formatPrice(item.price * item.qty)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span>{formatPrice(total)}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Shipping</span>
+                    <span>{shippingFee === 0 ? 'Free' : formatPrice(shippingFee)}</span>
+                  </div>
+                  {shippingFee > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Free shipping on orders over Rs. 2,000
+                    </p>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="flex justify-between font-bold">
+                  <span>Total</span>
+                  <span>{formatPrice(finalTotal)}</span>
+                </div>
+
+                <div className="space-y-3 pt-4">
                   {user && (
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -529,101 +426,35 @@ const Checkout = () => {
                         onCheckedChange={(checked) => setSaveInfo(checked as boolean)}
                       />
                       <Label htmlFor="saveInfo" className="text-sm">
-                        Save my information for faster checkout next time
+                        Save my information for next time
                       </Label>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
-          {/* Order Summary */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  {items.map((item) => (
-                    <div key={item.id} className="flex gap-3">
-                      <div className="h-16 w-16 rounded-md bg-muted overflow-hidden">
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <h4 className="font-medium text-sm leading-tight">{item.name}</h4>
-                        <p className="text-xs text-muted-foreground">{item.category}</p>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-muted-foreground">Qty: {item.qty}</span>
-                          <span className="font-medium text-sm">
-                            {formatPrice(item.price * item.qty)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal</span>
-                    <span>{formatPrice(total)}</span>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="terms"
+                      checked={agreeTerms}
+                      onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
+                    />
+                    <Label htmlFor="terms" className="text-sm">
+                      I agree to the terms and conditions
+                    </Label>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Shipping</span>
-                    <span className={shippingFee === 0 ? 'text-accent' : ''}>
-                      {shippingFee === 0 ? 'Free' : formatPrice(shippingFee)}
-                    </span>
+
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handlePlaceOrder}
+                    disabled={isProcessing || !agreeTerms}
+                  >
+                    {isProcessing ? 'Processing...' : `Place Order - ${formatPrice(finalTotal)}`}
+                  </Button>
+
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <Shield className="h-4 w-4" />
+                    <span>Secure checkout</span>
                   </div>
-                  {shippingFee === 0 && (
-                    <p className="text-xs text-accent">
-                      🎉 Free shipping on orders over PKR 2000!
-                    </p>
-                  )}
-                </div>
-
-                <Separator />
-
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total</span>
-                  <span>{formatPrice(finalTotal)}</span>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Shield className="h-4 w-4" />
-                  <span>Secure checkout protected by SSL encryption</span>
-                </div>
-
-                <Button
-                  onClick={() => handlePlaceOrder(paymentMethod as 'jazzcash' | 'easypaisa' | 'cash')}
-                  disabled={!agreeTerms || isProcessing}
-                  className="w-full bg-gradient-primary hover:bg-primary/90"
-                  size="lg"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Processing...
-                    </>
-                  ) : (
-                    `Place Order - ${formatPrice(finalTotal)}`
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Shield className="h-4 w-4" />
-                  <span>100% Secure & Safe Payment</span>
                 </div>
               </CardContent>
             </Card>
