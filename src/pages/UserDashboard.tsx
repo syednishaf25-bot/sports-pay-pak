@@ -20,22 +20,22 @@ interface Profile {
   phone?: string;
   address?: string;
   city?: string;
-  postal_code?: string;
+}
+
+interface OrderItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
 }
 
 interface Order {
   id: string;
-  order_number: string;
   total_amount: number;
   status: string;
   created_at: string;
-  order_items: Array<{
-    id: string;
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>;
+  customer_name: string;
+  order_items?: OrderItem[];
 }
 
 const profileSchema = z.object({
@@ -43,7 +43,6 @@ const profileSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
-  postal_code: z.string().optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
@@ -93,12 +92,11 @@ const UserDashboard = () => {
       }
 
       if (data) {
-        setProfile(data);
+        setProfile(data as Profile);
         setValue('full_name', data.full_name || '');
         setValue('phone', data.phone || '');
         setValue('address', data.address || '');
         setValue('city', data.city || '');
-        setValue('postal_code', data.postal_code || '');
       }
     } catch (error: any) {
       console.error('Error fetching profile:', error);
@@ -115,15 +113,14 @@ const UserDashboard = () => {
             id,
             product_name,
             quantity,
-            unit_price,
-            total_price
+            unit_price
           )
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      setOrders((data as Order[]) || []);
     } catch (error: any) {
       console.error('Error fetching orders:', error);
     }
